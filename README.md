@@ -5,6 +5,15 @@
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
 ![GitHub issues](https://img.shields.io/github/issues/XiaoPuOuO/UniqueCharEditor)
 
+
+## 🚀 下載與快速安裝
+
+- [👉 前往 Releases 下載最新版本](https://github.com/XiaoPuOuO/UniqueCharEditor/releases)
+- **Windows 用戶**可直接下載 `UniqueCharEditor.exe` 執行檔（免安裝）
+- 需原始碼或其他平台請下載 `UniqueCharEditor-src.zip`
+
+---
+
 一個基於 Python tkinter 製作的輕量級唯一字元檔案編輯器。  
 適合用於字型設計、遊戲字庫、缺字比對等場合，支援批量導入、比對與高亮查找。
 
