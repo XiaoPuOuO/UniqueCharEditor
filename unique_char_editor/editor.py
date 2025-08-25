@@ -1,110 +1,393 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk, font
 import os
 
 class UniqueCharEditor:
     def __init__(self, root):
         self.root = root
 
+        # 設置視窗圖示
         try:
             ico_path = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
             if os.path.exists(ico_path):
+                # 設置視窗標題列的圖示
                 self.root.iconbitmap(ico_path)
-        except tk.TclError:
-            pass
-        except OSError:
+                # 也設置任務欄圖示（Windows）
+                self.root.wm_iconbitmap(ico_path)
+            else:
+                # 如果找不到圖示檔案，嘗試其他可能的路徑
+                alternative_paths = [
+                    os.path.join(os.getcwd(), "assets", "icon.ico"),
+                    os.path.join(os.path.dirname(__file__), "icon.ico"),
+                    "icon.ico"
+                ]
+                for alt_path in alternative_paths:
+                    if os.path.exists(alt_path):
+                        self.root.iconbitmap(alt_path)
+                        self.root.wm_iconbitmap(alt_path)
+                        break
+        except (tk.TclError, OSError, Exception) as e:
+            print(f"無法載入圖示檔案: {e}")
             pass
 
-
-        self.root.title("UniqueCharEditor")
+        self.root.title("UniqueCharEditor - 獨特字元編輯器")
         self.filename = None
-        self.preview_font = tk.StringVar(value="Consolas")
-        self.preview_size = tk.IntVar(value=18)
+        self.preview_font = tk.StringVar(value="JetBrains Mono")
+        self.preview_size = tk.IntVar(value=14)
 
-        self.root.configure(bg="#f5f6fa")
-        self.root.geometry("900x480")
-        self.root.minsize(760, 360)
+        # 現代化配色方案
+        self.colors = {
+            'bg_primary': '#1a1b26',      # 深藍灰背景
+            'bg_secondary': '#24283b',    # 次要背景
+            'bg_card': '#414868',         # 卡片背景
+            'bg_input': '#f7f7f7',        # 輸入框背景
+            'text_primary': '#c0caf5',    # 主要文字
+            'text_secondary': '#9aa5ce',  # 次要文字
+            'accent_blue': '#7aa2f7',     # 藍色強調
+            'accent_green': '#9ece6a',    # 綠色強調
+            'accent_purple': '#bb9af7',   # 紫色強調
+            'accent_red': '#f7768e',      # 紅色強調
+            'accent_orange': '#ff9e64',   # 橙色強調
+            'hover_light': 'rgba(125, 207, 255, 0.1)'
+        }
 
-        # ========== 上方檔案列 ==========
-        file_frame = tk.Frame(root, bg="#f5f6fa")
-        file_frame.pack(fill="x", pady=12)
+        self.root.configure(bg=self.colors['bg_primary'])
+        self.root.geometry("1100x680")
+        self.root.minsize(900, 600)
 
-        tk.Label(file_frame, text="當前檔案：", font=('Segoe UI', 12, 'bold'), bg="#f5f6fa").pack(side="left", padx=(18,2))
-        self.file_path_var = tk.StringVar(value="請選擇檔案")
-        self.file_entry = tk.Entry(
-            file_frame, textvariable=self.file_path_var, font=('Segoe UI', 12),
-            width=60, state='readonly', readonlybackground="#fff", relief="flat"
+        # 配置 ttk 樣式
+        self.setup_styles()
+
+        # 創建主滾動容器
+        main_canvas = tk.Canvas(root, bg=self.colors['bg_primary'], highlightthickness=0)
+        main_scrollbar = tk.Scrollbar(root, orient="vertical", command=main_canvas.yview)
+        self.scrollable_frame = tk.Frame(main_canvas, bg=self.colors['bg_primary'])
+
+        # 配置滾動
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
         )
-        self.file_entry.pack(side="left", padx=3)
-        self.change_btn = tk.Button(file_frame, text="選擇檔案", command=self.change_file, width=9)
-        self.change_btn.pack(side="left", padx=7)
-        self.count_label = tk.Label(file_frame, text="字元數: 0", font=('Segoe UI', 11), bg="#f5f6fa")
-        self.count_label.pack(side="left", padx=16)
+
+        main_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=main_scrollbar.set)
+
+        # 放置滾動容器
+        main_canvas.pack(side="left", fill="both", expand=True)
+        main_scrollbar.pack(side="right", fill="y")
+
+        # 綁定鼠標滾輪事件
+        def _on_mousewheel(event):
+            main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+        def _bind_to_mousewheel(event):
+            main_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _unbind_from_mousewheel(event):
+            main_canvas.unbind_all("<MouseWheel>")
+
+        main_canvas.bind('<Enter>', _bind_to_mousewheel)
+        main_canvas.bind('<Leave>', _unbind_from_mousewheel)
+
+        # ========== 標題列 ==========
+        title_frame = tk.Frame(self.scrollable_frame, bg=self.colors['bg_primary'], height=60)
+        title_frame.pack(fill="x", pady=(20,0))
+        title_frame.pack_propagate(False)
+
+        title_label = tk.Label(
+            title_frame, 
+            text="🔤 UniqueCharEditor", 
+            font=('Segoe UI', 20, 'bold'), 
+            bg=self.colors['bg_primary'],
+            fg=self.colors['accent_blue']
+        )
+        title_label.pack(pady=15)
+
+        # ========== 檔案選擇區 ==========
+        file_container = tk.Frame(self.scrollable_frame, bg=self.colors['bg_primary'])
+        file_container.pack(fill="x", padx=50, pady=(10,20))
+
+        file_card = tk.Frame(file_container, bg=self.colors['bg_card'], relief="flat", bd=0)
+        file_card.pack(fill="x", pady=5)
+
+        file_inner = tk.Frame(file_card, bg=self.colors['bg_card'])
+        file_inner.pack(fill="x", padx=25, pady=20)
+
+        tk.Label(
+            file_inner, 
+            text="📁 當前檔案", 
+            font=('Segoe UI', 12, 'bold'), 
+            bg=self.colors['bg_card'],
+            fg=self.colors['text_primary']
+        ).pack(side="left", padx=(0,15))
+
+        self.file_path_var = tk.StringVar(value="請選擇要編輯的檔案...")
+        self.file_entry = tk.Entry(
+            file_inner, 
+            textvariable=self.file_path_var, 
+            font=('Segoe UI', 11),
+            width=65, 
+            state='readonly', 
+            readonlybackground=self.colors['bg_input'],
+            relief="flat",
+            bd=8,
+            fg='#555'
+        )
+        self.file_entry.pack(side="left", padx=(0,15))
+
+        self.change_btn = tk.Button(
+            file_inner, 
+            text="📂 瀏覽", 
+            command=self.change_file, 
+            font=('Segoe UI', 10, 'bold'),
+            bg=self.colors['accent_blue'],
+            fg='white',
+            activebackground='#5a7bc4',
+            relief="flat",
+            bd=0,
+            padx=20,
+            pady=8,
+            cursor="hand2"
+        )
+        self.change_btn.pack(side="left", padx=(0,20))
+
+        self.count_label = tk.Label(
+            file_inner, 
+            text="📊 字元數: 0", 
+            font=('Segoe UI', 11, 'bold'), 
+            bg=self.colors['bg_card'],
+            fg=self.colors['accent_green']
+        )
+        self.count_label.pack(side="left")
 
         # ========== 主內容區域 ==========
-        main_frame = tk.Frame(root, bg="#f5f6fa")
-        main_frame.pack(expand=True, fill="both", padx=18, pady=6)
+        # 創建居中的外層容器
+        center_wrapper = tk.Frame(self.scrollable_frame, bg=self.colors['bg_primary'])
+        center_wrapper.pack(expand=True, fill="both", pady=(0,30))
 
-        # 預覽區卡片
-        preview_card = tk.Frame(main_frame, bd=2, relief="groove", bg="#fafcff")
-        preview_card.pack(side="left", padx=6, pady=10, fill="both", expand=True)
+        # 主內容容器 - 使用固定寬度並居中
+        main_container = tk.Frame(center_wrapper, bg=self.colors['bg_primary'])
+        main_container.pack(expand=True, padx=50, pady=20)
 
-        # 內容預覽
-        tk.Label(preview_card, text="內容預覽", font=('Segoe UI', 12, 'bold'), bg="#fafcff").pack(anchor='w', padx=12, pady=(9,3))
+        # 左側預覽區
+        preview_container = tk.Frame(main_container, bg=self.colors['bg_primary'])
+        preview_container.pack(side="left", fill="both", expand=True, padx=(0,25))
+
+        preview_card = tk.Frame(preview_container, bg=self.colors['bg_card'], relief="flat", bd=0)
+        preview_card.pack(fill="both", expand=True)
+
+        # 預覽標題
+        preview_header = tk.Frame(preview_card, bg=self.colors['bg_card'], height=50)
+        preview_header.pack(fill="x", pady=(20,0))
+        preview_header.pack_propagate(False)
+
+        tk.Label(
+            preview_header, 
+            text="👁️ 內容預覽", 
+            font=('Segoe UI', 14, 'bold'), 
+            bg=self.colors['bg_card'],
+            fg=self.colors['text_primary']
+        ).pack(side="left", padx=25)
+
+        # 預覽文字框（帶滾動條）
+        preview_content = tk.Frame(preview_card, bg=self.colors['bg_card'])
+        preview_content.pack(fill="both", expand=True, padx=25, pady=(10,0))
+
+        # 創建文字框和滾動條的容器
+        text_container = tk.Frame(preview_content, bg=self.colors['bg_card'])
+        text_container.pack(fill="both", expand=True)
+
         self.preview_box = tk.Text(
-            preview_card, height=11, width=44, state='disabled',
+            text_container, 
+            state='disabled',
             font=(self.preview_font.get(), self.preview_size.get()),
-            wrap='char', bg="#fff", bd=0, padx=8, pady=8
+            wrap='char', 
+            bg='#2a2e42', 
+            fg=self.colors['text_primary'],
+            insertbackground=self.colors['accent_blue'],
+            selectbackground=self.colors['accent_purple'],
+            bd=0, 
+            relief="flat",
+            padx=15, 
+            pady=15
         )
-        self.preview_box.pack(fill="both", expand=True, padx=12, pady=(0,4))
-        self.preview_box.tag_configure("highlight", background="#ffd94a", foreground="black")
 
-        # 下方設定/查找區塊
-        util_frame = tk.Frame(preview_card, bg="#fafcff")
-        util_frame.pack(fill="x", padx=12, pady=(0,8))
+        # 添加垂直滾動條
+        scrollbar = tk.Scrollbar(text_container, orient="vertical", command=self.preview_box.yview)
+        self.preview_box.configure(yscrollcommand=scrollbar.set)
 
-        # 字體設定
-        tk.Label(util_frame, text="字體:", font=('Segoe UI', 10), bg="#fafcff").pack(side="left", padx=(0,2))
-        font_entry = tk.Entry(util_frame, textvariable=self.preview_font, width=11)
-        font_entry.pack(side="left", padx=(0,6))
-        tk.Label(util_frame, text="大小:", font=('Segoe UI', 10), bg="#fafcff").pack(side="left")
-        font_size = tk.Spinbox(util_frame, from_=8, to=48, textvariable=self.preview_size, width=3, command=self.update_preview)
-        font_size.pack(side="left", padx=(2, 8))
-        tk.Button(util_frame, text="套用", command=self.update_preview, width=5).pack(side="left", padx=(0, 16))
+        # 將文字框和滾動條放置
+        self.preview_box.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-        # 查找區塊
-        tk.Label(util_frame, text="查找字元:", font=('Segoe UI', 10), bg="#fafcff").pack(side="left")
-        self.search_entry = tk.Entry(util_frame, width=7)
-        self.search_entry.pack(side="left", padx=(2,0))
-        self.search_btn = tk.Button(util_frame, text="高亮", command=self.highlight_char, width=6)
-        self.search_btn.pack(side="left", padx=(5, 0))
+        self.preview_box.tag_configure("highlight", background=self.colors['accent_orange'], foreground="black")
 
-        # ========== 右側操作區卡片 ==========
-        op_card = tk.Frame(main_frame, bd=2, relief="groove", bg="#fcfcfc")
-        op_card.pack(side="left", padx=(24,6), pady=14, fill="y")
+        # 控制面板 - 使用更好的佈局
+        control_panel = tk.Frame(preview_card, bg=self.colors['bg_card'], height=80)
+        control_panel.pack(fill="x", padx=25, pady=(15,20))
+        control_panel.pack_propagate(False)
 
-        btn_opts = dict(width=18, height=2, font=('Segoe UI', 11, 'bold'), bg="#f6f7fb", activebackground="#ebeffa", relief=tk.RAISED)
-        self.add_btn = tk.Button(op_card, text="新增", command=self.add_chars_dialog, **btn_opts)
-        self.add_btn.pack(pady=(15,8))
-        self.del_btn = tk.Button(op_card, text="刪除", command=self.del_chars_dialog, **btn_opts)
-        self.del_btn.pack(pady=8)
-        self.import_btn = tk.Button(op_card, text="批量導入", command=self.import_chars_file, **btn_opts)
-        self.import_btn.pack(pady=8)
-        self.compare_btn = tk.Button(op_card, text="批量缺字比對", command=self.compare_chars_dialog, **btn_opts)
-        self.compare_btn.pack(pady=8)
-        self.clear_btn = tk.Button(op_card, text="清空全部", command=self.clear_all, **dict(btn_opts, bg="#fff2f2", fg="#b42a2a", activebackground="#ffdada"))
-        self.clear_btn.pack(pady=(36,12))
+        # 上排：字體設定
+        font_row = tk.Frame(control_panel, bg=self.colors['bg_card'])
+        font_row.pack(fill="x", pady=(5,8))
 
-        # 初始全部 disable
+        tk.Label(font_row, text="🎨 字體設定:", font=('Segoe UI', 10, 'bold'), bg=self.colors['bg_card'], fg=self.colors['text_primary']).pack(side="left", padx=(0,15))
+
+        tk.Label(font_row, text="字體:", font=('Segoe UI', 9), bg=self.colors['bg_card'], fg=self.colors['text_secondary']).pack(side="left", padx=(0,5))
+
+        # 獲取系統字體並創建字體選項
+        available_fonts = sorted(font.families())
+        common_fonts = ['Arial', 'Times New Roman', 'Consolas', 'JetBrains Mono', 'Courier New', 'Microsoft JhengHei', 'SimHei', 'SimSun']
+
+        # 合併常用字體和系統字體，去除重複
+        font_options = []
+        for f in common_fonts:
+            if f in available_fonts:
+                font_options.append(f)
+
+        # 添加其他系統字體
+        for f in available_fonts:
+            if f not in font_options:
+                font_options.append(f)
+
+        font_combobox = ttk.Combobox(
+            font_row, 
+            textvariable=self.preview_font, 
+            values=font_options,
+            width=16, 
+            state="readonly",
+            font=('Segoe UI', 9)
+        )
+        font_combobox.pack(side="left", padx=(0,15))
+
+        # 綁定字體變更事件
+        font_combobox.bind('<<ComboboxSelected>>', lambda e: self.update_preview())
+
+        tk.Label(font_row, text="大小:", font=('Segoe UI', 9), bg=self.colors['bg_card'], fg=self.colors['text_secondary']).pack(side="left", padx=(0,5))
+        font_size = tk.Spinbox(font_row, from_=8, to=48, textvariable=self.preview_size, width=5, command=self.update_preview, relief="flat", bd=3)
+        font_size.pack(side="left", padx=(0,15))
+
+        apply_btn = tk.Button(
+            font_row, 
+            text="✨ 套用", 
+            command=self.update_preview,
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.colors['accent_purple'],
+            fg='white',
+            activebackground='#9b85d4',
+            relief="flat",
+            bd=0,
+            padx=15,
+            pady=6,
+            cursor="hand2"
+        )
+        apply_btn.pack(side="left")
+
+        # 下排：搜尋功能
+        search_row = tk.Frame(control_panel, bg=self.colors['bg_card'])
+        search_row.pack(fill="x", pady=(0,5))
+
+        tk.Label(search_row, text="🔍 字元搜尋:", font=('Segoe UI', 10, 'bold'), bg=self.colors['bg_card'], fg=self.colors['text_primary']).pack(side="left", padx=(0,15))
+
+        tk.Label(search_row, text="查找:", font=('Segoe UI', 9), bg=self.colors['bg_card'], fg=self.colors['text_secondary']).pack(side="left", padx=(0,5))
+        self.search_entry = tk.Entry(search_row, width=12, font=('Segoe UI', 9), relief="flat", bd=3)
+        self.search_entry.pack(side="left", padx=(0,15))
+
+        self.search_btn = tk.Button(
+            search_row, 
+            text="🔆 高亮顯示", 
+            command=self.highlight_char,
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.colors['accent_orange'],
+            fg='white',
+            activebackground='#e6865a',
+            relief="flat",
+            bd=0,
+            padx=15,
+            pady=6,
+            cursor="hand2"
+        )
+        self.search_btn.pack(side="left")
+
+        # ========== 右側操作區 ==========
+        op_container = tk.Frame(main_container, bg=self.colors['bg_primary'], width=240)
+        op_container.pack(side="right", fill="y")
+        op_container.pack_propagate(False)
+
+        op_card = tk.Frame(op_container, bg=self.colors['bg_card'], relief="flat", bd=0)
+        op_card.pack(fill="both", expand=True)
+
+        # 操作標題
+        op_header = tk.Frame(op_card, bg=self.colors['bg_card'], height=50)
+        op_header.pack(fill="x", pady=(20,10))
+        op_header.pack_propagate(False)
+
+        tk.Label(
+            op_header, 
+            text="⚡ 操作面板", 
+            font=('Segoe UI', 13, 'bold'), 
+            bg=self.colors['bg_card'],
+            fg=self.colors['text_primary']
+        ).pack(padx=20)
+
+        # 按鈕區域
+        btn_container = tk.Frame(op_card, bg=self.colors['bg_card'])
+        btn_container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # 按鈕樣式配置
+        buttons_config = [
+            ("➕ 新增字元", self.add_chars_dialog, self.colors['accent_green'], '#7db46c'),
+            ("➖ 刪除字元", self.del_chars_dialog, self.colors['accent_blue'], '#5a7bc4'),
+            ("📥 批量導入", self.import_chars_file, self.colors['accent_purple'], '#9b85d4'),
+            ("🔍 缺字比對", self.compare_chars_dialog, self.colors['accent_orange'], '#e6865a'),
+            ("🗑️ 清空全部", self.clear_all, self.colors['accent_red'], '#d85d7a')
+        ]
+
+        self.operation_buttons = []
+        for i, (text, command, bg_color, hover_color) in enumerate(buttons_config):
+            btn = tk.Button(
+                btn_container,
+                text=text,
+                command=command,
+                font=('Segoe UI', 11, 'bold'),
+                bg=bg_color,
+                fg='white',
+                activebackground=hover_color,
+                relief="flat",
+                bd=0,
+                width=16,
+                pady=12,
+                cursor="hand2"
+            )
+
+            # 特殊間距處理
+            pady_top = 25 if i == len(buttons_config)-1 else 8
+            btn.pack(pady=(pady_top, 8), fill="x")
+            self.operation_buttons.append(btn)
+
+        # 初始狀態
         self.set_buttons_state("disabled")
         self.update_preview()
 
+    def setup_styles(self):
+        """設定 ttk 樣式"""
+        style = ttk.Style()
+        style.theme_use('clam')
+
+        # 配置各種樣式
+        style.configure('Custom.TButton',
+                       background=self.colors['accent_blue'],
+                       foreground='white',
+                       borderwidth=0,
+                       focuscolor='none',
+                       font=('Segoe UI', 10, 'bold'))
+
+        style.map('Custom.TButton',
+                 background=[('active', '#5a7bc4')])
+
     def set_buttons_state(self, state):
-        self.add_btn.config(state=state)
-        self.del_btn.config(state=state)
-        self.import_btn.config(state=state)
-        self.compare_btn.config(state=state)
-        self.clear_btn.config(state=state)
+        for btn in self.operation_buttons:
+            btn.config(state=state)
         self.search_btn.config(state=state)
 
     def get_content(self):
@@ -127,7 +410,7 @@ class UniqueCharEditor:
             self.preview_box.insert(tk.END, content[i:i+20] + '\n')
         self.preview_box.config(font=(self.preview_font.get(), self.preview_size.get()))
         self.preview_box.config(state='disabled')
-        self.count_label.config(text=f"字元數: {len(content)}" if self.filename else "字元數: 0")
+        self.count_label.config(text=f"📊 字元數: {len(content)}" if self.filename else "📊 字元數: 0")
         self.preview_box.tag_remove("highlight", "1.0", tk.END)
 
     def change_file(self):
@@ -177,8 +460,10 @@ class UniqueCharEditor:
         dialog.bind('<Escape>', lambda e: cancel())
 
     def add_chars(self, new_str):
+        # 過濾掉換行符號和空白字符
+        filtered_str = ''.join(c for c in new_str if not c.isspace())
         existing = set(self.get_content())
-        to_add = [c for c in new_str if c not in existing]
+        to_add = [c for c in filtered_str if c not in existing]
         if to_add:
             with open(self.filename, "a", encoding="utf-8") as f:
                 f.write("".join(to_add))
