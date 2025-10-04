@@ -340,6 +340,7 @@ class UniqueCharEditor:
             ("➖ 刪除字元", self.del_chars_dialog, self.colors['accent_blue'], '#5a7bc4'),
             ("📥 批量導入", self.import_chars_file, self.colors['accent_purple'], '#9b85d4'),
             ("🔍 缺字比對", self.compare_chars_dialog, self.colors['accent_orange'], '#e6865a'),
+            ("🔄 移除重複", self.remove_duplicates, self.colors['accent_orange'], '#e6865a'),
             ("🗑️ 清空全部", self.clear_all, self.colors['accent_red'], '#d85d7a')
         ]
 
@@ -488,9 +489,18 @@ class UniqueCharEditor:
         if path:
             with open(path, "r", encoding="utf-8") as f:
                 import_content = f.read()
-            added = self.add_chars(import_content)
-            if added:
-                messagebox.showinfo("批量導入成功", added)
+            
+            # 過濾掉換行符號和空白字符，並去除重複字元
+            filtered_str = ''.join(c for c in import_content if not c.isspace())
+            unique_chars = ''.join(dict.fromkeys(filtered_str))  # 保持順序並去除重複
+            
+            existing = set(self.get_content())
+            to_add = [c for c in unique_chars if c not in existing]
+            
+            if to_add:
+                with open(self.filename, "a", encoding="utf-8") as f:
+                    f.write("".join(to_add))
+                messagebox.showinfo("批量導入成功", f"已新增 {len(to_add)} 個不重複字元：\n{''.join(to_add)}")
             else:
                 messagebox.showinfo("無新增", "沒有任何新字元被新增。")
             self.update_preview()
@@ -511,6 +521,36 @@ class UniqueCharEditor:
                 messagebox.showinfo("缺字報表", msg)
             else:
                 messagebox.showinfo("缺字報表", "全部字元皆已包含！")
+
+    def remove_duplicates(self):
+        """移除檔案中的重複字元"""
+        content = self.get_content()
+        if not content:
+            messagebox.showinfo("提示", "檔案內容為空，無需移除重複字元。")
+            return
+        
+        # 計算重複字元數量
+        original_count = len(content)
+        unique_chars = ''.join(dict.fromkeys(content))  # 保持順序並去除重複
+        unique_count = len(unique_chars)
+        duplicates_count = original_count - unique_count
+        
+        if duplicates_count == 0:
+            messagebox.showinfo("無重複", "檔案中沒有重複字元。")
+            return
+        
+        # 二次確認對話框
+        confirm_msg = f"發現 {duplicates_count} 個重複字元\n\n" \
+                     f"原始字元數: {original_count}\n" \
+                     f"去重後字元數: {unique_count}\n\n" \
+                     f"確定要移除重複字元嗎？\n此操作無法還原！"
+        
+        if messagebox.askyesno("移除重複字元", confirm_msg):
+            self.write_content(unique_chars)
+            self.update_preview()
+            messagebox.showinfo("完成", f"已成功移除 {duplicates_count} 個重複字元！\n\n" \
+                                        f"原始: {original_count} 個字元\n" \
+                                        f"現在: {unique_count} 個字元")
 
     def clear_all(self):
         if messagebox.askyesno("清空全部", "確定要清空所有字元內容？\n此操作無法還原！"):
