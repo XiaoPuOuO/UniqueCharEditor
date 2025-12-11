@@ -1,0 +1,6 @@
+# Python 依赖列表
+# 此项目主要使用内置的 tkinter，无需额外依赖
+
+# 构建工具
+pyinstaller>=6.0.0
+pillow>=10.0.0  # 用于构建时转换图标格式（.ico -> .icns）
